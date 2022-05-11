@@ -377,6 +377,11 @@ func (c *Client) Stop() {
 
 // Handle implement EntryHandler; adds a new line to the next batch; send is async.
 func (c *Client) Handle(ls model.LabelSet, t time.Time, s string) error {
+	return c.HandleContext(context.Background(), ls, t, s)
+}
+
+// Handle implement EntryHandler; adds a new line to the next batch; send is async.
+func (c *Client) HandleContext(ctx context.Context, ls model.LabelSet, t time.Time, s string) error {
 	if len(c.externalLabels) > 0 {
 		ls = c.externalLabels.Merge(ls)
 	}
@@ -390,10 +395,15 @@ func (c *Client) Handle(ls model.LabelSet, t time.Time, s string) error {
 		delete(ls, ReservedLabelTenantID)
 	}
 
-	c.entries <- entry{tenantID, ls, logproto.Entry{
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case c.entries <- entry{tenantID, ls, logproto.Entry{
 		Timestamp: t,
 		Line:      s,
-	}}
+	}}:
+	}
+
 	return nil
 }
 
